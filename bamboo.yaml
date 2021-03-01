@@ -1,0 +1,46 @@
+---
+version: 2
+variables:
+ wso2DockerRegistry: "docker.wso2.com/wso2mi:1.2.0-alpine"
+ wso2DockerImage: "wso2mi:1.2.0.0-alpine" #This will be the latest tag
+ wso2DockerUsername: ""
+ wso2DockerPassword: ""
+ privateRegistry: ""
+ privateRegistryUserName: ""
+ privateRegistryPassword: ""
+ privateWSO2ImageName: "wso2mi" #The actual tag will be appended in the pipeline
+# triggers:
+#   - polling: 10
+plan:
+ project-key: TELS
+ key: DOCKERBUILD
+ name: Docker Pipeline
+stages:
+ - Build hull:
+   - Build
+Build:
+ tasks:
+   - clean
+   - checkout:
+       repository: DockerSpecs
+       path: specs
+       force-clean-build: true
+   - script: |
+       docker login ${bamboo.wso2DockerRegistry} -u ${bamboo.wso2DockerUsername} -p ${bamboo.wso2DockerPassword};
+       docker pull ${bamboo.wso2DockerRegistry}:${bamboo.wso2DockerImage};
+       updateLevel=$(docker inspect -f "{{json .Config.Labels.update_level }}" ${bamboo.wso2DockerRegistry}:${bamboo.wso2DockerImage} | tr -d \")
+ 
+       if [ -z "$updateLevel" ]; then
+           echo "ERROR: The Update level was not found in the Image. Aboarting the process!!"
+           exit 1
+       else
+           echo "The Update level is set as $updateLevel" 
+       fi
+ 
+       cd resources/docker
+       docker build -t ${bamboo.privateRegistry}/${bamboo.privateWSO2ImageName}:$updateLevel.${bamboo.buildNumber} .
+ 
+       docker login ${bamboo.privateRegistry} -u ${bamboo.privateRegistryUserName} -p ${bamboo.privateRegistryPassword}
+       docker push ${bamboo.privateRegistry}/${bamboo.privateWSO2ImageName}:$updateLevel.${bamboo.buildNumber}
+      
+       echo "Image ${bamboo.privateRegistry}/${bamboo.privateWSO2ImageName}:$updateLevel.${bamboo.buildNumber} pushed Successfully!"
